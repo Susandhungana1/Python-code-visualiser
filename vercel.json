@@ -1,5 +1,9 @@
 {
   "framework": "python",
   "buildCommand": "pip install -r requirements.txt",
-  "outputDirectory": "api"
+  "outputDirectory": "api",
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/index.py" },
+    { "src": "/.*", "dest": "/index.html" }
+  ]
 }
