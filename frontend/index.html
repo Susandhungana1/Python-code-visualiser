@@ -112,31 +112,23 @@ print(f"Factorial of 5 is: {result}")`);
                 });
             }, []);
 
-            const analyzeCode = async () => {
+const analyzeCode = async () => {
                 setLoading(true);
                 setError(null);
                 setResult(null);
                 try {
-                    console.log('Starting fetch to backend...');
-                    const apiUrl = 'http://localhost:8000/api/v1/analyze';
-                    console.log('URL:', apiUrl);
+                    const apiUrl = window.location.origin + '/api/v1/analyze';
                     const response = await fetch(apiUrl, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ code })
                     });
-                    console.log('Response status:', response.status);
-                    if (!response.ok) {
-                        const text = await response.text();
-                        throw new Error(`Server error (${response.status}): ${text}`);
-                    }
+                    if (!response.ok) throw new Error('Analysis failed');
                     const data = await response.json();
-                    console.log('Got data:', data);
                     setResult(data);
                 } catch (err) {
-                    console.error('Fetch error:', err);
                     const msg = err.name === 'TypeError' && err.message.includes('Failed to fetch') 
-                        ? 'Cannot connect to backend at http://localhost:8000\n\nPossible causes:\n1. Backend not running - Start it with: cd backend && python main.py\n2. Browser CORS block\n3. Network issue\n\nCheck browser console (F12) for details.'
+                        ? 'Cannot connect to server. Please refresh and try again.'
                         : err.message;
                     setError(msg);
                 } finally {

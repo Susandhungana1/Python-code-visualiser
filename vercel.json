@@ -1,11 +1,11 @@
 {
-  "build": {
-    "pip": "-r requirements.txt"
-  },
+  "buildCommand": "pip install -r requirements.txt",
+  "outputDirectory": "api",
+  "framework": null,
   "routes": [
     {
-      "src": "/api/v1/(.*)",
-      "dest": "/backend/main.py"
+      "src": "/api/(.*)",
+      "dest": "/api/vercel_app.py"
     },
     {
       "src": "/(.*)",
