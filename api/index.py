@@ -112,16 +112,11 @@ HTML_CONTENT = '''<!DOCTYPE html>
                                     </div>
                                     {activeTab==="explanation" && <div className="result-content">{result.explanation}</div>}
                                     {activeTab==="trace" && <div className="result-panel">
-                                        <div className="result-title">Execution Trace</div>
-                                        <div style={{marginBottom:8}}>Output: {result.output ? result.output.join(', ') : 'none'}</div>
-                                        {result.execution.map((s) => (
-                                            <div style={{padding:8, marginBottom:4, background:'#0f172a', borderRadius:4}}>
-                                                <div>Step {s.step}: Line {s.line_number} - {s.code}</div>
-                                                <div style={{color:'#7dd3fc', fontSize:'0.8rem'}}>
-                                                    {Object.keys(s.variables || {}).map(k => k + '=' + s.variables[k]).join(', ')}
-                                                </div>
-                                            </div>
-                                        ))}
+                                        <pre style={{background:'#0f172a', padding:10, borderRadius:4, overflow:'auto'}}>
+Output: {result.output ? result.output.join(', ') : 'none'}
+
+{result.execution.map(function(s) { return 'Step ' + s.step + ': L' + s.line_number + ' ' + s.code + '\n'; }).join('')}
+                                        </pre>
                                     </div>}</div>}
                                     {activeTab==="flow" && <div className="result-content">{result.flow?.join(" → ")}</div>}
                                     {activeTab==="improved" && <pre className="code-block">{result.fixed_code}</pre>}
