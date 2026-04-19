@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Python Code Visualizer</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .header { text-align: center; padding: 30px 0; border-bottom: 1px solid #1e293b; }
+        .header h1 { font-size: 2rem; color: #38bdf8; margin-bottom: 10px; }
+        .header p { color: #94a3b8; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+        .panel { background: #1e293b; border-radius: 12px; padding: 20px; }
+        .panel h2 { color: #f1f5f9; font-size: 1.1rem; margin-bottom: 16px; }
+        textarea { width: 100%; height: 350px; background: #0f172a; color: #e2e8f0; border: 1px solid #334155; border-radius: 8px; padding: 12px; font-family: monospace; font-size: 14px; }
+        .btn { width: 100%; padding: 14px; background: #0ea5e9; color: white; border: none; border-radius: 8px; font-size: 1rem; cursor: pointer; margin-top: 12px; }
+        .btn:hover { background: #0284c7; }
+        .tabs { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+        .tab { padding: 8px 14px; background: transparent; border: none; color: #94a3b8; cursor: pointer; border-radius: 6px; }
+        .tab.active { background: #334155; color: #38bdf8; }
+        .result { color: #cbd5e1; line-height: 1.7; white-space: pre-wrap; }
+        .code-block { background: #0f172a; padding: 12px; border-radius: 8px; font-family: monospace; font-size: 0.85rem; color: #a5b4fc; white-space: pre-wrap; }
+        .error { background: #450a0a; border: 1px solid #dc2626; color: #fca5a5; padding: 12px; border-radius: 8px; }
+        .loading { text-align: center; padding: 40px; color: #94a3b8; }
+        .trace { background: #0f172a; padding: 10px; border-radius: 4px; margin-bottom: 4px; }
+        .trace-num { color: #38bdf8; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>Python Code Visualizer</h1>
+            <p>See how your Python code executes step by step</p>
+        </header>
+        <div class="grid">
+            <div class="panel">
+                <h2>Python Code</h2>
+                <textarea id="code">x = 1
+y = 2
+print(x + y)</textarea>
+                <button class="btn" id="btn" onclick="analyze()">Analyze</button>
+            </div>
+            <div class="panel">
+                <h2>Results</h2>
+                <div id="results">
+                    <p style="color:#94a3b8">Click Analyze to see results</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+    let tab = 'explanation', data = null;
+    
+    function analyze() {
+        var btn = document.getElementById('btn');
+        var results = document.getElementById('results');
+        var code = document.getElementById('code').value;
+        
+        btn.disabled = true;
+        btn.textContent = 'Analyzing...';
+        results.innerHTML = '<p class="loading">Loading...</p>';
+        
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', window.location.origin + '/api/v1/analyze', true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        
+        xhr.onload = function() {
+            btn.disabled = false;
+            btn.textContent = 'Analyze';
+            if (xhr.status === 200) {
+                data = JSON.parse(xhr.responseText);
+                showResults();
+            } else {
+                results.innerHTML = '<p class="error">Error: ' + xhr.status + '</p>';
+            }
+        };
+        
+        xhr.onerror = function() {
+            btn.disabled = false;
+            btn.textContent = 'Analyze';
+            results.innerHTML = '<p class="error">Connection error. Make sure backend is running.</p>';
+        };
+        
+        xhr.send(JSON.stringify({code: code}));
+    }
+    
+    function showResults() {
+        var results = document.getElementById('results');
+        if (!data) return;
+        
+        var html = '<div class="tabs">';
+        ['explanation', 'trace', 'flow', 'improved'].forEach(function(t) {
+            html += '<button class="tab ' + (tab===t?'active':'') + '" onclick="tab=\''+t+'\';showResults()">' + t.charAt(0).toUpperCase() + t.slice(1) + '</button>';
+        });
+        html += '</div>';
+        
+        if (tab === 'explanation') {
+            html += '<div class="result">' + data.explanation + '</div>';
+        } else if (tab === 'trace') {
+            html += '<div class="code-block">';
+            if (data.output && data.output.length) html += 'Output: ' + data.output.join(', ') + '\n\n';
+            if (data.execution) for (var i = 0; i < data.execution.length; i++) {
+                var s = data.execution[i];
+                html += 'Step ' + s.step + ': L' + s.line_number + ' ' + s.code;
+                if (s.variables) {
+                    var vs = [];
+                    for (var k in s.variables) vs.push(k + '=' + s.variables[k]);
+                    if (vs.length) html += '\n  => ' + vs.join(', ');
+                }
+                html += '\n';
+            }
+            html += '</div>';
+        } else if (tab === 'flow') {
+            html += '<div class="result">' + (data.flow ? data.flow.join(' → ') : 'No flow') + '</div>';
+        } else if (tab === 'improved') {
+            html += '<pre class="code-block">' + data.fixed_code + '</pre>';
+        }
+        
+        results.innerHTML = html;
+    }
+    </script>
+</body>
+</html>
