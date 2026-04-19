@@ -79,16 +79,22 @@ print(x + y)</textarea>
         btn.textContent = 'Analyzing...';
         results.innerHTML = '<div class="loading"><p>Loading...</p></div>';
         
+        console.log('Sending request...', code);
+        
         try {
             const res = await fetch('/api/v1/analyze', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({code: code})
             });
-            if (!res.ok) throw new Error('Failed');
-            currentResult = await res.json();
+            console.log('Response status:', res.status);
+            if (!res.ok) throw new Error('Failed: ' + res.status);
+            const data = await res.json();
+            console.log('Got data:', data);
+            currentResult = data;
             renderResults();
         } catch(e) {
+            console.error('Error:', e);
             results.innerHTML = '<div class="error">Error: ' + e.message + '</div>';
         }
         
