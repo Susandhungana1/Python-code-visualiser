@@ -67,7 +67,7 @@ print(x + y)</textarea>
             </div>
         </div>
     </div>
-    <script>
+<script>
     var tab = 'explanation', data = null;
     function analyze() {
         var btn = document.getElementById('btn');
@@ -76,47 +76,67 @@ print(x + y)</textarea>
         btn.disabled = true;
         btn.textContent = 'Analyzing...';
         results.innerHTML = '<p class="loading">Loading...</p>';
+        
         var xhr = new XMLHttpRequest();
         xhr.open('POST', '/api/v1/analyze', true);
         xhr.setRequestHeader('Content-Type', 'application/json');
+        
         xhr.onload = function() {
             btn.disabled = false;
             btn.textContent = 'Analyze';
+            console.log('Status:', xhr.status, 'Response:', xhr.responseText.substring(0, 200));
             if (xhr.status === 200) {
-                data = JSON.parse(xhr.responseText);
-                showResults();
+                try {
+                    data = JSON.parse(xhr.responseText);
+                    showResults();
+                } catch(e) {
+                    results.innerHTML = '<p class="error">Parse error: ' + e.message + '<br>Response: ' + xhr.responseText.substring(0,200) + '</p>';
+                }
             } else {
                 results.innerHTML = '<p class="error">Error: ' + xhr.status + '</p>';
             }
         };
+        
         xhr.onerror = function() {
             btn.disabled = false;
             btn.textContent = 'Analyze';
-            results.innerHTML = '<p class="error">Connection error</p>';
+            results.innerHTML = '<p class="error">Connection error. Is the server running?</p>';
         };
+        
         xhr.send(JSON.stringify({code: code}));
     }
     function showResults() {
+        console.log('Showing results for tab:', tab, 'data:', data);
         var results = document.getElementById('results');
-        if (!data) return;
+        if (!data) {
+            results.innerHTML = '<p class="error">No data received</p>';
+            return;
+        }
+        
         var html = '<div class="tabs">';
         ['explanation', 'trace', 'flow', 'improved'].forEach(function(t) {
             html += '<button class="tab ' + (tab===t?'active':'') + '" onclick="tab=\''+t+'\';showResults()">' + t.charAt(0).toUpperCase() + t.slice(1) + '</button>';
         });
         html += '</div>';
-        if (tab === 'explanation') html += '<div class="result">' + data.explanation + '</div>';
-        else if (tab === 'trace') {
+        
+        if (tab === 'explanation') {
+            html += '<div class="result">' + (data.explanation || 'No explanation') + '</div>';
+        } else if (tab === 'trace') {
             html += '<div class="code-block">';
-            if (data.output && data.output.length) html += 'Output: ' + data.output.join(', ') + '\\n\\n';
+            if (data.output && data.output.length) html += 'Output: ' + data.output.join(', ') + '\n\n';
             if (data.execution) for (var i = 0; i < data.execution.length; i++) {
                 var s = data.execution[i];
                 html += 'Step ' + s.step + ': L' + s.line_number + ' ' + s.code;
-                if (s.variables) { var vs = []; for (var k in s.variables) vs.push(k + '=' + s.variables[k]); if (vs.length) html += '\\n  => ' + vs.join(', '); }
-                html += '\\n';
+                if (s.variables) { var vs = []; for (var k in s.variables) vs.push(k + '=' + s.variables[k]); if (vs.length) html += '\n  => ' + vs.join(', '); }
+                html += '\n';
             }
             html += '</div>';
-        } else if (tab === 'flow') html += '<div class="result">' + (data.flow ? data.flow.join(' → ') : 'No flow') + '</div>';
-        else if (tab === 'improved') html += '<pre class="code-block">' + data.fixed_code + '</pre>';
+        } else if (tab === 'flow') {
+            html += '<div class="result">' + (data.flow ? data.flow.join(' → ') : 'No flow') + '</div>';
+        } else if (tab === 'improved') {
+            html += '<pre class="code-block">' + data.fixed_code + '</pre>';
+        }
+        
         results.innerHTML = html;
     }
     </script>
