@@ -51,8 +51,8 @@ HTML_CONTENT = '''<!DOCTYPE html>
 <body>
     <div id="root"></div>
     <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
-        function App() {
+        import { useState, useEffect, useRef } = React;
+        const App = () => {
             const [code, setCode] = useState("x = 1\\ny = 2\\nprint(x + y)");
             const [loading, setLoading] = useState(false);
             const [result, setResult] = useState(null);
@@ -111,7 +111,16 @@ HTML_CONTENT = '''<!DOCTYPE html>
                                         <button className={"tab " + (activeTab==="improved"?"active":"")} onClick={()=>setActiveTab("improved")}>Improved</button>
                                     </div>
                                     {activeTab==="explanation" && <div className="result-content">{result.explanation}</div>}
-                                    {activeTab==="trace" && <div className="result-content">{result.execution.map((s,i)=><div key={i}>Line {s.line_number}: {s.code}</div>)}</div>}
+                                    {activeTab==="trace" && <div className="result-content">
+                                        {result.output?.length > 0 && <div style={{marginBottom:8,color:'#4ade80'}}>Output: {result.output.join(', ')}</div>}
+                                        {result.execution.map((s,i)=><div key={i} style={{padding:4,borderBottom:'1px solid #334155'}}>
+                                            <span style={{color:'#38bdf8'}}>Step {s.step}: </span>
+                                            <span style={{color:'#94a3b8'}}>Line {s.line_number}</span> - {s.code}
+                                            {Object.keys(s.variables || {}).length > 0 && <div style={{color:'#7dd3fc', fontSize:'0.85rem', marginTop:4}}>
+                                                {Object.keys(s.variables || {}).map(k => k + '=' + s.variables[k]).join(', ')}
+                                            </div>}
+                                        </div>)}
+                                    </div>}</div>}
                                     {activeTab==="flow" && <div className="result-content">{result.flow?.join(" → ")}</div>}
                                     {activeTab==="improved" && <pre className="code-block">{result.fixed_code}</pre>}
                                 </div>
@@ -148,16 +157,14 @@ def execute_code(code: str) -> dict:
     output = []
     error = None
     steps = []
-    seen_lines = set()
+    step_counter = [0]  # Use list to allow modification in closure
     
     def tracing(frame, event, arg):
         if event == 'line':
             filename = frame.f_code.co_filename
             if filename == '<string>':
                 lineno = frame.f_lineno
-                if lineno in seen_lines:
-                    return tracing
-                seen_lines.add(lineno)
+                step_counter[0] += 1
                 
                 lines = frame.f_globals.get('_source_lines', [])
                 code_line = lines[lineno - 1] if 0 <= lineno - 1 < len(lines) else f"Line {lineno}"
@@ -170,7 +177,7 @@ def execute_code(code: str) -> dict:
                         except:
                             local_vars[k] = f"<{type(v).__name__}>"
                 
-                steps.append({'line_number': lineno, 'code': code_line, 'variables': local_vars})
+                steps.append({'step': step_counter[0], 'line_number': lineno, 'code': code_line, 'variables': local_vars})
         return tracing
     
     safe_globals = {
