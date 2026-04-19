@@ -111,15 +111,17 @@ HTML_CONTENT = '''<!DOCTYPE html>
                                         <button className={"tab " + (activeTab==="improved"?"active":"")} onClick={()=>setActiveTab("improved")}>Improved</button>
                                     </div>
                                     {activeTab==="explanation" && <div className="result-content">{result.explanation}</div>}
-                                    {activeTab==="trace" && <div className="result-content">
-                                        {result.output?.length > 0 && <div style={{marginBottom:8,color:'#4ade80'}}>Output: {result.output.join(', ')}</div>}
-                                        {result.execution.map((s,i)=><div key={i} style={{padding:4,borderBottom:'1px solid #334155'}}>
-                                            <span style={{color:'#38bdf8'}}>Step {s.step}: </span>
-                                            <span style={{color:'#94a3b8'}}>Line {s.line_number}</span> - {s.code}
-                                            {Object.keys(s.variables || {}).length > 0 && <div style={{color:'#7dd3fc', fontSize:'0.85rem', marginTop:4}}>
-                                                {Object.keys(s.variables || {}).map(k => k + '=' + s.variables[k]).join(', ')}
-                                            </div>}
-                                        </div>)}
+                                    {activeTab==="trace" && <div className="result-panel">
+                                        <div className="result-title">Execution Trace</div>
+                                        <div style={{marginBottom:8}}>Output: {result.output ? result.output.join(', ') : 'none'}</div>
+                                        {result.execution.map((s) => (
+                                            <div style={{padding:8, marginBottom:4, background:'#0f172a', borderRadius:4}}>
+                                                <div>Step {s.step}: Line {s.line_number} - {s.code}</div>
+                                                <div style={{color:'#7dd3fc', fontSize:'0.8rem'}}>
+                                                    {Object.keys(s.variables || {}).map(k => k + '=' + s.variables[k]).join(', ')}
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>}</div>}
                                     {activeTab==="flow" && <div className="result-content">{result.flow?.join(" → ")}</div>}
                                     {activeTab==="improved" && <pre className="code-block">{result.fixed_code}</pre>}
