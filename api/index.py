@@ -8,12 +8,12 @@ api_key = os.environ.get('OPENROUTER_API_KEY', '')
 import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
-
-class AnalyzeRequest(BaseModel):
-    code: str
-
+# Read the HTML file
+with open("public/index.html", "r") as f:
+    HTML_CONTENT = f.read()
 
 app = FastAPI(title="Python Code Visualizer", version="1.0.0")
 
@@ -24,6 +24,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class AnalyzeRequest(BaseModel):
+    code: str
 
 
 def execute_code(code: str) -> dict:
@@ -129,7 +133,14 @@ Execution: {str(execution_result.get('execution', []))[:500]}"""
 
 @app.get("/")
 async def root():
-    return {"status": "ok", "message": "Python Code Visualizer"}
+    """Serve the HTML frontend"""
+    return HTMLResponse(content=HTML_CONTENT, media_type="text/html")
+
+
+@app.get("/index.html")
+async def index_html():
+    """Serve index.html"""
+    return HTMLResponse(content=HTML_CONTENT, media_type="text/html")
 
 
 @app.post("/api/v1/analyze")
@@ -137,7 +148,7 @@ async def analyze(request: AnalyzeRequest):
     exec_result = execute_code(request.code)
     ai_result = call_ai(request.code, exec_result, api_key)
     
-    return {
+    return JSONResponse(content={
         "explanation": ai_result.get('explanation', 'No explanation'),
         "fixed_code": ai_result.get('fixed_code', request.code),
         "execution": exec_result.get('execution', []),
@@ -146,8 +157,7 @@ async def analyze(request: AnalyzeRequest):
         "steps": ai_result.get('steps', []),
         "key_points": ai_result.get('key_points', []),
         "error": exec_result.get('error')
-    }
+    })
 
 
-# Vercel entry point
 handler = app
