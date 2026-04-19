@@ -11,20 +11,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
-# Embedded HTML - simpler than reading from file
 HTML_CONTENT = '''<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Python Code Visualizer</title>
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+        body { font-family: -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
         .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
         .header { text-align: center; padding: 30px 0; border-bottom: 1px solid #1e293b; margin-bottom: 30px; }
         .header h1 { font-size: 2.5rem; color: #38bdf8; margin-bottom: 10px; }
@@ -33,101 +28,111 @@ HTML_CONTENT = '''<!DOCTYPE html>
         @media (max-width: 1024px) { .main-grid { grid-template-columns: 1fr; } }
         .panel { background: #1e293b; border-radius: 12px; padding: 20px; border: 1px solid #334155; }
         .panel-title { font-size: 1.1rem; font-weight: 600; color: #f1f5f9; margin-bottom: 16px; }
-        .editor-container { height: 400px; border-radius: 8px; overflow: hidden; border: 1px solid #334155; }
-        .analyze-btn { width: 100%; padding: 16px; font-size: 1.1rem; font-weight: 600; background: linear-gradient(135deg, #0ea5e9, #3b82f6); color: white; border: none; border-radius: 8px; cursor: pointer; margin-top: 16px; }
-        .analyze-btn:hover { transform: translateY(-2px); }
-        .analyze-btn:disabled { opacity: 0.5; }
-        .result-panel { background: #1e293b; border-radius: 12px; padding: 20px; margin-top: 20px; border: 1px solid #334155; }
-        .result-title { font-size: 1.2rem; font-weight: 600; color: #38bdf8; margin-bottom: 12px; }
-        .result-content { color: #cbd5e1; line-height: 1.7; }
-        .code-block { background: #0f172a; padding: 16px; border-radius: 8px; font-family: monospace; font-size: 0.9rem; overflow-x: auto; color: #a5b4fc; }
-        .tabs { display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid #334155; padding-bottom: 8px; }
+        textarea { width: 100%; height: 400px; background: #0f172a; color: #e2e8f0; border: 1px solid #334155; border-radius: 8px; padding: 16px; font-family: monospace; font-size: 14px; resize: vertical; }
+        .btn { width: 100%; padding: 16px; font-size: 1.1rem; font-weight: 600; background: linear-gradient(135deg, #0ea5e9, #3b82f6); color: white; border: none; border-radius: 8px; cursor: pointer; margin-top: 16px; }
+        .btn:hover { transform: translateY(-2px); }
+        .btn:disabled { opacity: 0.5; }
+        .tabs { display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid #334155; padding-bottom: 8px; flex-wrap: wrap; }
         .tab { padding: 8px 16px; background: transparent; border: none; color: #94a3b8; cursor: pointer; border-radius: 6px; font-size: 0.9rem; }
         .tab.active { background: #334155; color: #38bdf8; }
-        .error-display { background: #450a0a; border: 1px solid #dc2626; color: #fca5a5; padding: 16px; border-radius: 8px; }
+        .result-content { color: #cbd5e1; line-height: 1.7; white-space: pre-wrap; }
+        .code-block { background: #0f172a; padding: 16px; border-radius: 8px; font-family: monospace; font-size: 0.9rem; overflow-x: auto; color: #a5b4fc; white-space: pre-wrap; }
+        .error { background: #450a0a; border: 1px solid #dc2626; color: #fca5a5; padding: 16px; border-radius: 8px; }
         .loading { text-align: center; padding: 40px; color: #94a3b8; }
+        .trace-step { padding: 8px; margin-bottom: 4px; background: #0f172a; border-radius: 4px; }
+        .trace-step-num { color: #38bdf8; font-weight: bold; }
+        .trace-var { color: #7dd3fc; font-size: 0.85rem; }
     </style>
 </head>
 <body>
-    <div id="root"></div>
-    <script type="text/babel">
-        import { useState, useEffect, useRef } = React;
-        const App = () => {
-            const [code, setCode] = useState("x = 1\\ny = 2\\nprint(x + y)");
-            const [loading, setLoading] = useState(false);
-            const [result, setResult] = useState(null);
-            const [error, setError] = useState(null);
-            const [activeTab, setActiveTab] = useState("explanation");
-            const editorRef = useRef(null);
-            
-            useEffect(() => {
-                require.config({ paths: { vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs" } });
-                require(["vs/editor/editor.main"], function() {
-                    if (!editorRef.current) {
-                        editorRef.current = monaco.editor.create(document.getElementById("editor"), {
-                            value: code, language: "python", theme: "vs-dark", fontSize: 14, minimap: { enabled: false },
-                            automaticLayout: true, wordWrap: "on"
-                        });
-                        editorRef.current.onDidChangeModelContent(() => setCode(editorRef.current.getValue()));
-                    }
-                });
-            }, []);
-            
-            const analyzeCode = async () => {
-                setLoading(true); setError(null); setResult(null);
-                try {
-                    const res = await fetch("/api/v1/analyze", {
-                        method: "POST", headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ code })
-                    });
-                    if (!res.ok) throw new Error("Failed");
-                    setResult(await res.json());
-                } catch (e) { setError(e.message); }
-                finally { setLoading(false); }
-            };
-            
-            return (
-                <div className="container">
-                    <header className="header"><h1>Python Code Visualizer</h1><p>Paste your Python code and see how it executes</p></header>
-                    <div className="main-grid">
-                        <div className="panel">
-                            <div className="panel-title">Python Code</div>
-                            <div className="editor-container" id="editor"></div>
-                            <button className="analyze-btn" onClick={analyzeCode} disabled={loading}>
-                                {loading ? "Analyzing..." : "Analyze"}
-                            </button>
-                        </div>
-                        <div className="panel">
-                            <div className="panel-title">Results</div>
-                            {!result && !error && !loading && <div className="loading"><p>Click Analyze to see results</p></div>}
-                            {loading && <div className="loading"><p>Loading...</p></div>}
-                            {error && <div className="error-display">{error}</div>}
-                            {result && (
-                                <div>
-                                    <div className="tabs">
-                                        <button className={"tab " + (activeTab==="explanation"?"active":"")} onClick={()=>setActiveTab("explanation")}>Explanation</button>
-                                        <button className={"tab " + (activeTab==="trace"?"active":"")} onClick={()=>setActiveTab("trace")}>Trace</button>
-                                        <button className={"tab " + (activeTab==="flow"?"active":"")} onClick={()=>setActiveTab("flow")}>Flow</button>
-                                        <button className={"tab " + (activeTab==="improved"?"active":"")} onClick={()=>setActiveTab("improved")}>Improved</button>
-                                    </div>
-                                    {activeTab==="explanation" && <div className="result-content">{result.explanation}</div>}
-                                    {activeTab==="trace" && <div className="result-panel">
-                                        <pre style={{background:'#0f172a', padding:10, borderRadius:4, overflow:'auto'}}>
-Output: {result.output ? result.output.join(', ') : 'none'}
-
-{result.execution.map(function(s) { return 'Step ' + s.step + ': L' + s.line_number + ' ' + s.code + '\n'; }).join('')}
-                                        </pre>
-                                    </div>}</div>}
-                                    {activeTab==="flow" && <div className="result-content">{result.flow?.join(" → ")}</div>}
-                                    {activeTab==="improved" && <pre className="code-block">{result.fixed_code}</pre>}
-                                </div>
-                            )}
-                        </div>
-                    </div>
+    <div class="container">
+        <header class="header">
+            <h1>Python Code Visualizer</h1>
+            <p>Paste your Python code and see how it executes</p>
+        </header>
+        <div class="main-grid">
+            <div class="panel">
+                <div class="panel-title">Python Code</div>
+                <textarea id="codeEditor" spellcheck="false">x = 1
+y = 2
+print(x + y)</textarea>
+                <button class="btn" id="analyzeBtn" onclick="analyzeCode()">Analyze</button>
+            </div>
+            <div class="panel">
+                <div class="panel-title">Results</div>
+                <div id="results">
+                    <div class="loading"><p>Click Analyze to see results</p></div>
                 </div>
-            );
+            </div>
+        </div>
+    </div>
+    <script>
+    let activeTab = 'explanation';
+    let currentResult = null;
+    
+    async function analyzeCode() {
+        const btn = document.getElementById('analyzeBtn');
+        const results = document.getElementById('results');
+        const code = document.getElementById('codeEditor').value;
+        
+        btn.disabled = true;
+        btn.textContent = 'Analyzing...';
+        results.innerHTML = '<div class="loading"><p>Loading...</p></div>';
+        
+        try {
+            const res = await fetch('/api/v1/analyze', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({code: code})
+            });
+            if (!res.ok) throw new Error('Failed');
+            currentResult = await res.json();
+            renderResults();
+        } catch(e) {
+            results.innerHTML = '<div class="error">Error: ' + e.message + '</div>';
         }
-        ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+        
+        btn.disabled = false;
+        btn.textContent = 'Analyze';
+    }
+    
+    function renderResults() {
+        const results = document.getElementById('results');
+        if (!currentResult) return;
+        
+        let html = '<div class="tabs">';
+        html += '<button class="tab ' + (activeTab==='explanation'?'active':'') + '" onclick="activeTab=\'explanation\';renderResults()">Explanation</button>';
+        html += '<button class="tab ' + (activeTab==='trace'?'active':'') + '" onclick="activeTab=\'trace\';renderResults()">Trace</button>';
+        html += '<button class="tab ' + (activeTab==='flow'?'active':'') + '" onclick="activeTab=\'flow\';renderResults()">Flow</button>';
+        html += '<button class="tab ' + (activeTab==='improved'?'active':'') + '" onclick="activeTab=\'improved\';renderResults()">Improved</button>';
+        html += '</div>';
+        
+        if (activeTab === 'explanation') {
+            html += '<div class="result-content">' + currentResult.explanation + '</div>';
+        } else if (activeTab === 'trace') {
+            html += '<div class="code-block">';
+            if (currentResult.output && currentResult.output.length > 0) {
+                html += 'Output: ' + currentResult.output.join(', ') + '\n\n';
+            }
+            if (currentResult.execution) {
+                currentResult.execution.forEach(function(s) {
+                    html += 'Step ' + s.step + ': L' + s.line_number + ' ' + s.code;
+                    if (s.variables && Object.keys(s.variables).length > 0) {
+                        const vars = Object.keys(s.variables).map(k => k + '=' + s.variables[k]).join(', ');
+                        html += '\n  variables: ' + vars;
+                    }
+                    html += '\n';
+                });
+            }
+            html += '</div>';
+        } else if (activeTab === 'flow') {
+            html += '<div class="result-content">' + (currentResult.flow ? currentResult.flow.join(' → ') : 'No flow') + '</div>';
+        } else if (activeTab === 'improved') {
+            html += '<pre class="code-block">' + currentResult.fixed_code + '</pre>';
+        }
+        
+        results.innerHTML = html;
+    }
     </script>
 </body>
 </html>'''
@@ -142,19 +147,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 class AnalyzeRequest(BaseModel):
     code: str
 
-
 def execute_code(code: str) -> dict:
-    """Execute Python code with tracing"""
     import sys
-    
     output = []
     error = None
     steps = []
-    step_counter = [0]  # Use list to allow modification in closure
+    step_counter = [0]
     
     def tracing(frame, event, arg):
         if event == 'line':
@@ -162,10 +163,8 @@ def execute_code(code: str) -> dict:
             if filename == '<string>':
                 lineno = frame.f_lineno
                 step_counter[0] += 1
-                
                 lines = frame.f_globals.get('_source_lines', [])
                 code_line = lines[lineno - 1] if 0 <= lineno - 1 < len(lines) else f"Line {lineno}"
-                
                 local_vars = {}
                 for k, v in frame.f_locals.items():
                     if not k.startswith('__') and k not in ['_source_lines']:
@@ -173,7 +172,6 @@ def execute_code(code: str) -> dict:
                             local_vars[k] = repr(v)[:50]
                         except:
                             local_vars[k] = f"<{type(v).__name__}>"
-                
                 steps.append({'step': step_counter[0], 'line_number': lineno, 'code': code_line, 'variables': local_vars})
         return tracing
     
@@ -202,30 +200,19 @@ def execute_code(code: str) -> dict:
     
     return {'execution': steps, 'output': output, 'error': error}
 
-
 def call_ai(code: str, execution_result: dict, api_key: str) -> dict:
-    """Call OpenRouter AI"""
     if not api_key or api_key == 'your_openrouter_api_key_here':
         lines = [l for l in code.strip().split('\n') if l.strip()]
         return {
             'explanation': f"This Python code has {len(lines)} lines.\n\n" + '\n'.join([f"- Line {i+1}: {l}" for i, l in enumerate(lines)]),
             'fixed_code': f"# Improved version\n\n{code}",
             'flow': ['Start'] + [f'Step {i+1}' for i in range(len(lines))] + ['End'],
-            'steps': [{'step': i+1, 'description': l.strip(), 'variables_changed': []} for i, l in enumerate(lines)],
-            'key_points': ['Code executes line by line', 'Variables store values', 'Functions organize code']
+            'steps': [{'step': i+1, 'description': l.strip()} for i, l in enumerate(lines)],
+            'key_points': ['Code executes line by line', 'Variables store values']
         }
     
     import json
-    prompt = f"""Analyze this Python code. Return JSON with:
-- explanation (beginner-friendly)
-- fixed_code (improved version)
-- flow (array of steps)
-- steps (array with step, description, variables_changed)
-- key_points (array)
-
-Code: {code[:500]}
-Execution: {str(execution_result.get('execution', []))[:500]}"""
-
+    prompt = f"Analyze this Python code. Return JSON with: explanation, fixed_code, flow (array), steps (array), key_points (array).\n\nCode: {code[:500]}\nExecution: {str(execution_result.get('execution', []))[:500]}"
     try:
         response = httpx.post(
             "https://openrouter.ai/api/v1/chat/completions",
@@ -245,24 +232,14 @@ Execution: {str(execution_result.get('execution', []))[:500]}"""
     except Exception as e:
         return {'error': str(e)}
 
-
 @app.get("/")
 async def root():
-    """Serve the HTML frontend"""
     return HTMLResponse(content=HTML_CONTENT, media_type="text/html")
-
-
-@app.get("/index.html")
-async def index_html():
-    """Serve index.html"""
-    return HTMLResponse(content=HTML_CONTENT, media_type="text/html")
-
 
 @app.post("/api/v1/analyze")
 async def analyze(request: AnalyzeRequest):
     exec_result = execute_code(request.code)
     ai_result = call_ai(request.code, exec_result, api_key)
-    
     return JSONResponse(content={
         "explanation": ai_result.get('explanation', 'No explanation'),
         "fixed_code": ai_result.get('fixed_code', request.code),
@@ -273,6 +250,5 @@ async def analyze(request: AnalyzeRequest):
         "key_points": ai_result.get('key_points', []),
         "error": exec_result.get('error')
     })
-
 
 handler = app
