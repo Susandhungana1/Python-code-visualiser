@@ -11,9 +11,120 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
-# Read the HTML file
-with open("public/index.html", "r") as f:
-    HTML_CONTENT = f.read()
+# Embedded HTML - simpler than reading from file
+HTML_CONTENT = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Python Code Visualizer</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        .header { text-align: center; padding: 30px 0; border-bottom: 1px solid #1e293b; margin-bottom: 30px; }
+        .header h1 { font-size: 2.5rem; color: #38bdf8; margin-bottom: 10px; }
+        .header p { color: #94a3b8; font-size: 1.1rem; }
+        .main-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+        @media (max-width: 1024px) { .main-grid { grid-template-columns: 1fr; } }
+        .panel { background: #1e293b; border-radius: 12px; padding: 20px; border: 1px solid #334155; }
+        .panel-title { font-size: 1.1rem; font-weight: 600; color: #f1f5f9; margin-bottom: 16px; }
+        .editor-container { height: 400px; border-radius: 8px; overflow: hidden; border: 1px solid #334155; }
+        .analyze-btn { width: 100%; padding: 16px; font-size: 1.1rem; font-weight: 600; background: linear-gradient(135deg, #0ea5e9, #3b82f6); color: white; border: none; border-radius: 8px; cursor: pointer; margin-top: 16px; }
+        .analyze-btn:hover { transform: translateY(-2px); }
+        .analyze-btn:disabled { opacity: 0.5; }
+        .result-panel { background: #1e293b; border-radius: 12px; padding: 20px; margin-top: 20px; border: 1px solid #334155; }
+        .result-title { font-size: 1.2rem; font-weight: 600; color: #38bdf8; margin-bottom: 12px; }
+        .result-content { color: #cbd5e1; line-height: 1.7; }
+        .code-block { background: #0f172a; padding: 16px; border-radius: 8px; font-family: monospace; font-size: 0.9rem; overflow-x: auto; color: #a5b4fc; }
+        .tabs { display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid #334155; padding-bottom: 8px; }
+        .tab { padding: 8px 16px; background: transparent; border: none; color: #94a3b8; cursor: pointer; border-radius: 6px; font-size: 0.9rem; }
+        .tab.active { background: #334155; color: #38bdf8; }
+        .error-display { background: #450a0a; border: 1px solid #dc2626; color: #fca5a5; padding: 16px; border-radius: 8px; }
+        .loading { text-align: center; padding: 40px; color: #94a3b8; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+        function App() {
+            const [code, setCode] = useState("x = 1\\ny = 2\\nprint(x + y)");
+            const [loading, setLoading] = useState(false);
+            const [result, setResult] = useState(null);
+            const [error, setError] = useState(null);
+            const [activeTab, setActiveTab] = useState("explanation");
+            const editorRef = useRef(null);
+            
+            useEffect(() => {
+                require.config({ paths: { vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs" } });
+                require(["vs/editor/editor.main"], function() {
+                    if (!editorRef.current) {
+                        editorRef.current = monaco.editor.create(document.getElementById("editor"), {
+                            value: code, language: "python", theme: "vs-dark", fontSize: 14, minimap: { enabled: false },
+                            automaticLayout: true, wordWrap: "on"
+                        });
+                        editorRef.current.onDidChangeModelContent(() => setCode(editorRef.current.getValue()));
+                    }
+                });
+            }, []);
+            
+            const analyzeCode = async () => {
+                setLoading(true); setError(null); setResult(null);
+                try {
+                    const res = await fetch("/api/v1/analyze", {
+                        method: "POST", headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ code })
+                    });
+                    if (!res.ok) throw new Error("Failed");
+                    setResult(await res.json());
+                } catch (e) { setError(e.message); }
+                finally { setLoading(false); }
+            };
+            
+            return (
+                <div className="container">
+                    <header className="header"><h1>Python Code Visualizer</h1><p>Paste your Python code and see how it executes</p></header>
+                    <div className="main-grid">
+                        <div className="panel">
+                            <div className="panel-title">Python Code</div>
+                            <div className="editor-container" id="editor"></div>
+                            <button className="analyze-btn" onClick={analyzeCode} disabled={loading}>
+                                {loading ? "Analyzing..." : "Analyze"}
+                            </button>
+                        </div>
+                        <div className="panel">
+                            <div className="panel-title">Results</div>
+                            {!result && !error && !loading && <div className="loading"><p>Click Analyze to see results</p></div>}
+                            {loading && <div className="loading"><p>Loading...</p></div>}
+                            {error && <div className="error-display">{error}</div>}
+                            {result && (
+                                <div>
+                                    <div className="tabs">
+                                        <button className={"tab " + (activeTab==="explanation"?"active":"")} onClick={()=>setActiveTab("explanation")}>Explanation</button>
+                                        <button className={"tab " + (activeTab==="trace"?"active":"")} onClick={()=>setActiveTab("trace")}>Trace</button>
+                                        <button className={"tab " + (activeTab==="flow"?"active":"")} onClick={()=>setActiveTab("flow")}>Flow</button>
+                                        <button className={"tab " + (activeTab==="improved"?"active":"")} onClick={()=>setActiveTab("improved")}>Improved</button>
+                                    </div>
+                                    {activeTab==="explanation" && <div className="result-content">{result.explanation}</div>}
+                                    {activeTab==="trace" && <div className="result-content">{result.execution.map((s,i)=><div key={i}>Line {s.line_number}: {s.code}</div>)}</div>}
+                                    {activeTab==="flow" && <div className="result-content">{result.flow?.join(" → ")}</div>}
+                                    {activeTab==="improved" && <pre className="code-block">{result.fixed_code}</pre>}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+    </script>
+</body>
+</html>'''
 
 app = FastAPI(title="Python Code Visualizer", version="1.0.0")
 
