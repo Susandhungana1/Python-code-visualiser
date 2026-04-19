@@ -66,74 +66,76 @@ print(x + y)</textarea>
             </div>
         </div>
     </div>
-    <script>
-    let activeTab = 'explanation';
+<script>
     let currentResult = null;
+    let currentTab = 'explanation';
     
-    async function analyzeCode() {
-        const btn = document.getElementById('analyzeBtn');
-        const results = document.getElementById('results');
-        const code = document.getElementById('codeEditor').value;
+    function analyzeCode() {
+        var btn = document.getElementById('analyzeBtn');
+        var results = document.getElementById('results');
+        var code = document.getElementById('codeEditor').value;
         
         btn.disabled = true;
-        btn.textContent = 'Analyzing...';
-        results.innerHTML = '<div class="loading"><p>Loading...</p></div>';
+        btn.innerHTML = 'Loading...';
+        results.innerHTML = '<p>Loading...</p>';
         
-        console.log('Sending request...', code);
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/v1/analyze', true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
         
-        try {
-            const res = await fetch('/api/v1/analyze', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({code: code})
-            });
-            console.log('Response status:', res.status);
-            if (!res.ok) throw new Error('Failed: ' + res.status);
-            const data = await res.json();
-            console.log('Got data:', data);
-            currentResult = data;
-            renderResults();
-        } catch(e) {
-            console.error('Error:', e);
-            results.innerHTML = '<div class="error">Error: ' + e.message + '</div>';
-        }
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === 4) {
+                btn.disabled = false;
+                btn.innerHTML = 'Analyze';
+                
+                if (xhr.status === 200) {
+                    currentResult = JSON.parse(xhr.responseText);
+                    showResults();
+                } else {
+                    results.innerHTML = '<p class="error">Error: ' + xhr.status + '</p>';
+                }
+            }
+        };
         
-        btn.disabled = false;
-        btn.textContent = 'Analyze';
+        xhr.send(JSON.stringify({code: code}));
     }
     
-    function renderResults() {
-        const results = document.getElementById('results');
+    function showResults() {
+        var results = document.getElementById('results');
         if (!currentResult) return;
         
-        let html = '<div class="tabs">';
-        html += '<button class="tab ' + (activeTab==='explanation'?'active':'') + '" onclick="activeTab=\'explanation\';renderResults()">Explanation</button>';
-        html += '<button class="tab ' + (activeTab==='trace'?'active':'') + '" onclick="activeTab=\'trace\';renderResults()">Trace</button>';
-        html += '<button class="tab ' + (activeTab==='flow'?'active':'') + '" onclick="activeTab=\'flow\';renderResults()">Flow</button>';
-        html += '<button class="tab ' + (activeTab==='improved'?'active':'') + '" onclick="activeTab=\'improved\';renderResults()">Improved</button>';
+        var html = '<div class="tabs">';
+        html += '<button class="tab ' + (currentTab==='explanation'?'active':'') + '" onclick="currentTab=\'explanation\';showResults()">Explanation</button>';
+        html += '<button class="tab ' + (currentTab==='trace'?'active':'') + '" onclick="currentTab=\'trace\';showResults()">Trace</button>';
+        html += '<button class="tab ' + (currentTab==='flow'?'active':'') + '" onclick="currentTab=\'flow\';showResults()">Flow</button>';
+        html += '<button class="tab ' + (currentTab==='improved'?'active':'') + '" onclick="currentTab=\'improved\';showResults()">Improved</button>';
         html += '</div>';
         
-        if (activeTab === 'explanation') {
+        if (currentTab === 'explanation') {
             html += '<div class="result-content">' + currentResult.explanation + '</div>';
-        } else if (activeTab === 'trace') {
+        } else if (currentTab === 'trace') {
             html += '<div class="code-block">';
             if (currentResult.output && currentResult.output.length > 0) {
                 html += 'Output: ' + currentResult.output.join(', ') + '\n\n';
             }
             if (currentResult.execution) {
-                currentResult.execution.forEach(function(s) {
+                for (var i = 0; i < currentResult.execution.length; i++) {
+                    var s = currentResult.execution[i];
                     html += 'Step ' + s.step + ': L' + s.line_number + ' ' + s.code;
                     if (s.variables && Object.keys(s.variables).length > 0) {
-                        const vars = Object.keys(s.variables).map(k => k + '=' + s.variables[k]).join(', ');
-                        html += '\n  variables: ' + vars;
+                        var vars = [];
+                        for (var k in s.variables) {
+                            vars.push(k + '=' + s.variables[k]);
+                        }
+                        html += '\n  variables: ' + vars.join(', ');
                     }
                     html += '\n';
-                });
+                }
             }
             html += '</div>';
-        } else if (activeTab === 'flow') {
+        } else if (currentTab === 'flow') {
             html += '<div class="result-content">' + (currentResult.flow ? currentResult.flow.join(' → ') : 'No flow') + '</div>';
-        } else if (activeTab === 'improved') {
+        } else if (currentTab === 'improved') {
             html += '<pre class="code-block">' + currentResult.fixed_code + '</pre>';
         }
         
